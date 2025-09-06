@@ -1,0 +1,14 @@
+{
+  "dst": {
+    "serverPath": "D:\\DST\\dstServer",
+    "executable": "dontstarve_dedicated_server_nullrenderer_x64.exe",
+    "storageRoot": "D:\\DST\\dstConfig",
+    "clusterName": "MyCluster",
+    "ugcDir": "D:\\DST\\steamcmd\\steamapps\\workshop",
+    "cluster": "Cluster_1"
+  },
+  "steam": {
+    "cmdPath": "D:\\DST\\steamcmd\\steamcmd.exe",
+    "workshopAcfPath": "D:\\DST\\dstServer\\steamapps\\workshop\\appworkshop_322330.acf"
+  }
+}

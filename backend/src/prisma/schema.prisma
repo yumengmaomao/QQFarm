@@ -1,0 +1,366 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// --- 数据源定义 ---
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+// --- Prisma 客户端生成器 ---
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --- JSON 类型生成器配置 ---
+generator json {
+  provider  = "prisma-json-types-generator"
+  namespace = "PrismaJson"
+}
+
+// ==============================================================================
+// 玩家核心数据模型 (Player Core Models)
+// ==============================================================================
+model UserAuth {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique @db.VarChar(255)
+  nickName     String   @db.VarChar(255)
+  password     String   @db.VarChar(255)
+  refreshToken String?  @db.Text
+  user         User?
+  createdAt    DateTime @default(now())
+}
+
+model User {
+  id              Int    @id @default(autoincrement())
+  authId          Int    @unique
+  nickName        String @db.VarChar(255)
+  level           Int    @default(1)
+  exp             Int    @default(0)
+  gold            BigInt @default(1000)
+  premiumCurrency Int    @default(0)
+
+  // --- 关系定义 ---
+  auth                   UserAuth        @relation(fields: [authId], references: [id])
+  farm                   Farm?
+  logs                   PlayerLog[]
+  // 我发出的好友请求
+  sentFriendRequests     Friendship[]    @relation("sentRequests")
+  // 我收到的好友请求
+  receivedFriendRequests Friendship[]    @relation("receivedRequests")
+  stealActions           StealLog[]
+  shopLogs               ShopLog[]
+  seedInventoryItems     SeedInventory[]
+  propInventoryItems     PropInventory[]
+  stats                  UserStats?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authId])
+}
+
+// ==============================================================================
+// 玩家统计数据模型 (Player Statistics Model)
+// ==============================================================================
+
+model UserStats {
+  id            Int  @id @default(autoincrement())
+  userId        Int  @unique
+  user          User @relation(fields: [userId], references: [id])
+  stealCount    Int  @default(0)
+  harvestCount  Int  @default(0)
+  sabotageCount Int  @default(0)
+  helpCount     Int  @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@index([stealCount])
+  @@index([harvestCount])
+  @@index([sabotageCount])
+  @@index([helpCount])
+}
+
+// ==============================================================================
+// 游戏内核心数据模型
+// ==============================================================================
+
+/**
+ * 【核心修改】好友关系模型现在包含状态，以支持请求/接受/拒绝流程。
+ */
+model Friendship {
+  // 发起好友关系的用户ID (请求者)
+  requesterId Int
+  // 被添加为好友的用户ID (接收者)
+  addresseeId Int
+
+  // 【新增】好友关系的状态
+  status FriendRequestStatus @default(PENDING)
+
+  // 【改动】关系字段名更新，使其更具可读性
+  requester User @relation("sentRequests", fields: [requesterId], references: [id])
+  addressee User @relation("receivedRequests", fields: [addresseeId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 复合主键：确保任何两个用户之间只有一条单向的好友记录。
+  @@id([requesterId, addresseeId])
+  @@index([addresseeId])
+}
+
+model Farm {
+  id                   Int        @id @default(autoincrement())
+  userId               Int        @unique
+  maturityCycleCounter BigInt     @default(0)
+  user                 User       @relation(fields: [userId], references: [id])
+  lands                LandPlot[]
+  createdAt            DateTime   @default(now())
+
+  @@index([userId])
+}
+
+model LandPlot {
+  id                       Int        @id @default(autoincrement())
+  farmId                   Int
+  plotIndex                Int
+  stolenNum                Int        @default(0)
+  maturityCycleId          BigInt?
+  growthTimeReducedSeconds Int        @default(0)
+  plantId                  Int?
+  plantTime                DateTime?
+  waterState               Int        @default(0)
+  fertilizerState          Int        @default(0)
+  hasWeeds                 Boolean    @default(false)
+  hasPests                 Boolean    @default(false)
+  weedPlacedBy             Int?
+  pestPlacedBy             Int?
+  farm                     Farm       @relation(fields: [farmId], references: [id])
+  plant                    Plant?     @relation(fields: [plantId], references: [id])
+  stealLogs                StealLog[]
+
+  @@unique([farmId, plotIndex])
+  @@index([farmId])
+  @@index([plantId])
+}
+
+model StealLog {
+  id              Int      @id @default(autoincrement())
+  landPlotId      Int
+  stealerId       Int
+  maturityCycleId BigInt
+  stolenAt        DateTime @default(now())
+  landPlot        LandPlot @relation(fields: [landPlotId], references: [id])
+  stealer         User     @relation(fields: [stealerId], references: [id])
+
+  @@unique([landPlotId, stealerId, maturityCycleId])
+  @@index([landPlotId])
+  @@index([stealerId])
+}
+
+model DailyInteraction {
+  id         Int        @id @default(autoincrement())
+  userId     Int
+  actionType ActionType
+  date       DateTime   @db.Date
+  count      Int        @default(1)
+
+  @@unique([userId, actionType, date])
+}
+
+// ==============================================================================
+// 物品与库存模型 (Item & Inventory Models)
+// 采用“具体表模式”
+// ==============================================================================
+
+model Plant {
+  id                 Int             @id
+  name               String          @db.VarChar(255)
+  itemType           String
+  image              String?         @db.VarChar(255)
+  requiredLevel      Int
+  category           String?         @db.VarChar(255)
+  /// [PlantEconomics]
+  economics          Json
+  /// [PlantGrowth]
+  growth             Json
+  /// [PlantRewards]
+  rewards            Json
+  /// [PlantEfficiency]
+  efficiency         Json
+  /// [PlantLimits]
+  limits             Json
+  landPlots          LandPlot[]
+  shopLogs           ShopLog[]
+  seedInventoryItems SeedInventory[]
+}
+
+model Prop {
+  id                 Int             @id @default(autoincrement())
+  name               String          @db.VarChar(255)
+  description        String          @db.Text
+  image              String?         @db.VarChar(255)
+  propType           PropType
+  /// [PropEffectType]
+  effect             Json?
+  buyPrice           BigInt?
+  sellPrice          BigInt
+  propInventoryItems PropInventory[]
+  shopLogs           ShopLog[]
+}
+
+model SeedInventory {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  plantId   Int
+  quantity  Int
+  itemType  ItemType // SEED or FRUIT
+  user      User     @relation(fields: [userId], references: [id])
+  plant     Plant    @relation(fields: [plantId], references: [id])
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, plantId, itemType])
+  @@index([userId])
+  @@index([plantId])
+}
+
+model PropInventory {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  propId    Int
+  quantity  Int
+  user      User     @relation(fields: [userId], references: [id])
+  prop      Prop     @relation(fields: [propId], references: [id])
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, propId])
+  @@index([userId])
+  @@index([propId])
+}
+
+// ==============================================================================
+// 日志模型 (Log Models)
+// ==============================================================================
+model PlayerLog {
+  id          Int         @id @default(autoincrement())
+  userId      Int
+  user        User        @relation(fields: [userId], references: [id])
+  actionType  ActionType
+  targetModel TargetModel
+  targetId    Int?
+  oldData     Json?
+  newData     Json?
+  param       String?     @db.Text
+  timestamp   DateTime    @default(now())
+
+  @@index([userId])
+}
+
+model ShopLog {
+  id              Int             @id @default(autoincrement())
+  userId          Int
+  user            User            @relation(fields: [userId], references: [id])
+  quantity        Int
+  pricePerUnit    BigInt
+  totalPrice      BigInt
+  transactionType TransactionType
+  itemType        ItemType
+  plantId         Int?
+  plant           Plant?          @relation(fields: [plantId], references: [id])
+  propId          Int?
+  prop            Prop?           @relation(fields: [propId], references: [id])
+  timestamp       DateTime        @default(now())
+
+  @@index([userId])
+  @@index([plantId])
+  @@index([propId])
+}
+
+// ==============================================================================
+// 枚举类型 (Enums)
+// ==============================================================================
+
+/**
+ * 【新增】好友请求状态枚举
+ */
+enum FriendRequestStatus {
+  PENDING // 待处理
+  ACCEPTED // 已接受
+  BLOCKED // 已屏蔽/拒绝
+}
+
+/**
+ * 用于 SeedInventory 和 ShopLog，区分物品是种子、果实还是道具。
+ */
+enum ItemType {
+  SEED // 种子
+  FRUIT // 果实
+  PROP // 道具
+}
+
+/**
+ * 用于 Prop 模型，区分道具的具体类型。
+ */
+enum PropType {
+  FERTILIZER // 肥料
+  STATUS_BUFF // 状态增益 (Buff)
+  DECORATION // 装饰品/放置物
+  UNLOCK // 解锁类道具
+  CONSUMABLE // 消耗品
+  SPECIAL // 特殊物品
+}
+
+/**
+ * 玩家行为类型枚举，用于 PlayerLog。
+ */
+enum ActionType {
+  // --- 核心农场操作 ---
+  PLOW // 犁地
+  PLANT // 种植
+  WATER // 浇水
+  FERTILIZE // 施肥
+  HARVEST // 收获
+  BUY // 购买
+  SELL // 出售
+  UPGRADE // 升级
+
+  // --- 自己的农场维护 ---
+  WEED // 除草 (自己)
+  PEST // 除虫 (自己)
+
+  // --- 好友互动 (正面) ---
+  HELP_WATER // 帮助好友浇水
+  HELP_WEED // 帮助好友除草
+  HELP_PEST // 帮助好友除虫
+  STEAL // 偷窃
+
+  // --- 好友互动 (负面/捣乱) ---
+  SABOTAGE_WEED // 对好友放草
+  SABOTAGE_PEST // 对好友放虫
+
+  // --- 系统/账户 ---
+  LOGOUT // 登出
+}
+
+/**
+ * 被操作的模型目标枚举，用于 PlayerLog。
+ */
+enum TargetModel {
+  USER // 用户档案
+  USERAUTH // 用户认证信息
+  FARM // 农场
+  LANDPLOT // 土地
+  INVENTORYITEM // 库存物品 (历史字段，代表 SeedInventory 或 PropInventory)
+  PLANT // 植物静态数据
+  FRIENDS // 好友关系
+  PLAYERLOG // 玩家日志
+}
+
+/**
+ * 商店交易类型枚举，用于 ShopLog。
+ */
+enum TransactionType {
+  BUY // 购买
+  SELL // 出售
+}

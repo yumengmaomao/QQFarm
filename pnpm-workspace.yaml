@@ -1,0 +1,9 @@
+# QQFarm/pnpm-workspace.yaml
+
+packages:
+  # 包含所有在 packages/ 目录下的包
+  - "packages/*"
+  # 包含 backend 项目
+  - "backend"
+  # 如果你有 frontend 项目，也加进来
+  - "frontend"

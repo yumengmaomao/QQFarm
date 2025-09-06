@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    // --- 模块与目标 ---
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    // --- 输出 ---
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": true, // <-- 关键：生成 .d.ts 类型声明文件
+    "declarationMap": true, // 生成 .d.ts.map 文件，方便调试
+    "sourceMap": true, // 生成 .js.map 文件
+
+    // --- 严格性与代码质量 ---
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"], // 只编译 src 目录下的文件
+  "exclude": ["node_modules", "dist"] // 排除这些目录
+}
